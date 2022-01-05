@@ -1,4 +1,5 @@
 const express = require ('express');
+const req = require('express/lib/request');
 const { v4: uuidv4 } = require ('uuid');
 
 const app = express();
@@ -17,6 +18,19 @@ function verifyExistsAccountCPF(req, res, next) {
     }
     req.customer = customer;
     return next();
+}
+
+function getBalance(statement) {
+    const balance = statement.reduce((acc, operation) => {
+        if(operation.type === "credit"){
+            return acc + operation.amount;
+        }
+        else{
+            return acc - operation.amount;
+        } 
+    }, 0);
+
+    return balance;
 }
 
 app.post("/account", (req, res) => {
@@ -48,6 +62,16 @@ app.get("/statement/", (req, res) => {
 
 });
 
+app.get("/statement/date", (req, res) => {
+    const { customer } = req; 
+    const { date } = req.query;
+    const dateFormat = new Date(date + " 00:00");
+
+    const statement = customer.statement.filter((statement) => statement.created_at.toDateString() === new Date(dateFormat).toDateString());
+    return res.status(200).json(statement);
+ 
+ }); 
+
 app.post("/deposit", (req, res) => {
     const { description, amount } = req.body;
 
@@ -65,4 +89,50 @@ app.post("/deposit", (req, res) => {
     return res.status(201).send(statementOperation);
 });
 
+app.post("/withdraw", (req, res) => {
+    const { amount } = req.body
+    const { customer } = req;
+    const balance = getBalance(customer.statement);
+    if(balance < amount) {
+        return res.status(400).json({error: "Insufficient funds!"});
+    }
+
+    const statementOperation = {
+        amount,
+        created_at: new Date(),
+        type: "debit",
+    }
+    customer.statement.push(statementOperation);
+
+    return res.status(201).send();
+});
+
+app.put("/account", (req, res) => {
+    const { name } = req.body;
+    const { customer } = req;
+
+    customer.name = name;
+
+    return res.status(201).send();
+});
+
+app.get("/account", (req, res) => {
+    const { customer } = req;
+
+    return res.json(customer);
+});
+
+app.delete("/account", (req, res) => {
+    const { customer } = req;
+    customers.splice(customer, 1);
+    
+    return res.status(200).json(customers);
+});
+
+app.get("/balance", (req, res)  => {
+    const { customer } = req;
+
+    const balance = getBalance(customer.statement);
+    return res.json(balance);
+});
 app.listen(3333);  
